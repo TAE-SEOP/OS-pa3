@@ -64,7 +64,31 @@ extern unsigned int alloc_page(void);
 bool translate(enum memory_access_type rw, unsigned int vpn, unsigned int *pfn)
 {
 	/*** DO NOT MODIFY THE PAGE TABLE IN THIS FUNCTION ***/
+	struct pte_directory *pd;
+	unsigned int offset = (vpn << 28) >> 28;
+	unsigned int v = vpn >> 4;
 
+	pd = current->pagetable.outer_ptes[v];
+	struct pte *pte = &pd->ptes[offset];
+
+
+	if (rw == 0) {
+		if (pd && pte) {
+			if (pte->valid == 1) {
+				*pfn = pte->pfn;
+				return true;
+			}
+		}
+	}
+
+	else if(rw == 1) {
+		if (pd && pte) {
+			if (pte->writable == 1) {
+				*pfn = pte->pfn;
+				return true;
+			}
+		}
+	}
 	return false;
 }
 
@@ -88,6 +112,27 @@ bool translate(enum memory_access_type rw, unsigned int vpn, unsigned int *pfn)
  */
 bool handle_page_fault(enum memory_access_type rw, unsigned int vpn)
 {
+	struct pte_directory *pd;
+	struct pte_directory *current_pd;
+	unsigned int offset = (vpn << 28) >> 28;
+	unsigned int v = vpn >> 4;
+	current_pd = current->pagetable.outer_ptes[v];
+
+	if (!current_pd->ptes) {
+		pd = (struct pte_directory *)malloc(sizeof(struct pte_directory));
+		current->pagetable.outer_ptes[v] = pd;
+		goto jump;
+	}
+
+	pd = current_pd;
+	
+jump:
+
+		pd->ptes[offset].valid = true;
+		pd->ptes[offset].writable = 1;
+		pd->ptes[offset].pfn = alloc_page();
+
+	
 	return true;
 }
 
@@ -108,5 +153,28 @@ bool handle_page_fault(enum memory_access_type rw, unsigned int vpn)
  */
 void switch_process(unsigned int pid)
 {
+
+
+	struct process *order = NULL;
+	struct process *next = NULL;
+	struct process process;
+	list_for_each_entry(order, &processes, list) {
+		if (order->pid == pid) {
+			next = order;
+			break;
+		}
+	}
+	if (next == NULL) {
+		printf("pid : %d\n", pid);
+		process.pid = pid;
+		process.pagetable = current->pagetable;
+		list_add_tail(&process.list, &processes);
+		next = &process;
+
+	}
+	list_add_tail(&current->list, &processes);
+	
+
+	current = next;
 }
 
