@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
-#include <string.h>
 #include "types.h"
 #include "list_head.h"
 #include "vm.h"
