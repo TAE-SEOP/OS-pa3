@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
-
+#include <string.h>
 #include "types.h"
 #include "list_head.h"
 #include "vm.h"
@@ -128,9 +128,11 @@ bool handle_page_fault(enum memory_access_type rw, unsigned int vpn)
 	
 jump:
 
-		pd->ptes[offset].valid = true;
-		pd->ptes[offset].writable = 1;
-		pd->ptes[offset].pfn = alloc_page();
+
+
+	pd->ptes[offset].valid = true;
+	pd->ptes[offset].writable = 1;
+	pd->ptes[offset].pfn = alloc_page();
 
 	
 	return true;
@@ -153,28 +155,47 @@ jump:
  */
 void switch_process(unsigned int pid)
 {
-
-
-	struct process *order = NULL;
-	struct process *next = NULL;
-	struct process process;
+	struct process *new_process = (struct process *)malloc(sizeof(struct process));
+	struct process *order;
+	struct pte_directory *pd;
+	struct pte_directory *pd2;
 	list_for_each_entry(order, &processes, list) {
 		if (order->pid == pid) {
-			next = order;
-			break;
+			list_replace(&order->list, &current->list);
+			current = order;
+			goto skip;
 		}
 	}
-	if (next == NULL) {
-		printf("pid : %d\n", pid);
-		process.pid = pid;
-		process.pagetable = current->pagetable;
-		list_add_tail(&process.list, &processes);
-		next = &process;
 
+	for (int i = 0; i < NR_PTES_PER_PAGE;i++) {  
+		if(current->pagetable.outer_ptes[i] != NULL ) {  
+
+			pd = (struct pte_directory *)malloc(sizeof(struct pte_directory));
+			pd2 = current->pagetable.outer_ptes[i];
+			for (int j = 0; j < NR_PTES_PER_PAGE; j++) {
+				pd->ptes[j].valid = pd2->ptes[j].valid;   // current를 pd로 복사한다.
+				pd->ptes[j].writable = pd2->ptes[j].writable;
+				pd->ptes[j].pfn = pd2->ptes[j].pfn;
+				if (pd2->ptes[j].writable == 1) {
+					pd2->ptes[j].writable = 0;  //current에서의 rw를 r로 바꾼다.
+					pd->ptes[j].writable = 0;   //바꿀 process에서의 rw를 r로 바꾼다.
+				}
+			}
+			new_process->pagetable.outer_ptes[i] = pd;  
+
+		}
 	}
-	list_add_tail(&current->list, &processes);
-	
 
-	current = next;
+
+	list_add(&current->list, &processes);
+
+	new_process->pid = pid;
+		
+
+   	current = new_process;
+skip:
+	return;
+
+
 }
 
